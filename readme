@@ -1,0 +1,27 @@
+RPly 1.01-mod1
+http://w3.impa.br/~diego/software/rply/
+
+Copyright © 2003-2005 Diego Nehab
+  http://www.cs.princeton.edu/~diego
+Modified 2011-09-01 by Lars Kiesow
+  http://larskiesow.de
+  lkiesow@uos.de
+
+ABOUT
+====================
+RPly: ANSI C Library for PLY file format input and output 
+
+RPly is a library originally written by Diego Nehab, that lets applications
+read and write PLY files. The PLY file format is widely used to store geometric
+information, such as 3D models, but is general enough to be useful for other
+purposes.
+
+
+
+COMPILATION
+====================
+For compilation of the library simply call
+% make
+
+Furthermore you can create some example programs by calling
+% make test
