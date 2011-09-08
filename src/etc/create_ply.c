@@ -42,28 +42,28 @@ int main( int argc, char ** argv ) {
 	}
 
 	/* Add vertex element. We want to add 9999 vertices. */
-	if ( !ply_add_element( oply, "vertex", 9999 ) ) {
+	if ( !ply_add_element( oply, "vertex", 99999 ) ) {
 		fprintf( stderr, "ERROR: Could not add element.\n" );
 		return EXIT_FAILURE;
 	}
 
 	/* Add vertex properties: x, y, z, r, g, b */
-	if ( !ply_add_property( oply, "x", PLY_FLOAT, 0, 0 ) ) {
+	if ( !ply_add_property( oply, "x",     PLY_FLOAT, 0, 0 ) ) {
 		fprintf( stderr, "ERROR: Could not add property x.\n" );
 		return EXIT_FAILURE;
 	}
 
-	if ( !ply_add_property( oply, "y", PLY_FLOAT, 0, 0 ) ) {
+	if ( !ply_add_property( oply, "y",     PLY_FLOAT, 0, 0 ) ) {
 		fprintf( stderr, "ERROR: Could not add property x.\n" );
 		return EXIT_FAILURE;
 	}
 
-	if ( !ply_add_property( oply, "z", PLY_FLOAT, 0, 0 ) ) {
+	if ( !ply_add_property( oply, "z",     PLY_FLOAT, 0, 0 ) ) {
 		fprintf( stderr, "ERROR: Could not add property x.\n" );
 		return EXIT_FAILURE;
 	}
 
-	if ( !ply_add_property( oply, "red", PLY_UCHAR, 0, 0 ) ) {
+	if ( !ply_add_property( oply, "red",   PLY_UCHAR, 0, 0 ) ) {
 		fprintf( stderr, "ERROR: Could not add property x.\n" );
 		return EXIT_FAILURE;
 	}
@@ -73,7 +73,7 @@ int main( int argc, char ** argv ) {
 		return EXIT_FAILURE;
 	}
 
-	if ( !ply_add_property( oply, "blue", PLY_UCHAR, 0, 0 ) ) {
+	if ( !ply_add_property( oply, "blue",  PLY_UCHAR, 0, 0 ) ) {
 		fprintf( stderr, "ERROR: Could not add property x.\n" );
 		return EXIT_FAILURE;
 	}
@@ -88,12 +88,12 @@ int main( int argc, char ** argv ) {
 	srand ( time( NULL ) );
 
 	int i;
-	for ( i = 0; i < 9999; i++ ) {
-		ply_write( oply, (double) (rand() % 10000 ) / 10.0 ); /* x */
-		ply_write( oply, (double) (rand() % 10000 ) / 10.0 ); /* y */
-		ply_write( oply, (double) (rand() % 10000 ) / 10.0 ); /* z */
-		ply_write( oply, rand() % 256 ); /* red */
-		ply_write( oply, rand() % 256 ); /* blue */
+	for ( i = 0; i < 99999; i++ ) {
+		ply_write( oply, (double) ( rand() % 10000 ) / 10.0 ); /* x */
+		ply_write( oply, (double) ( rand() % 10000 ) / 10.0 ); /* y */
+		ply_write( oply, (double) ( rand() % 10000 ) / 10.0 ); /* z */
+		ply_write( oply, rand() % 256 ); /* red   */
+		ply_write( oply, rand() % 256 ); /* blue  */
 		ply_write( oply, rand() % 256 ); /* green */
 	}
 
