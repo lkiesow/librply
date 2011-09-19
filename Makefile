@@ -1,4 +1,4 @@
-INSTPATH=/lib64
+INSTPATH=/lib
 INCPATH=/usr/include
 
 lib: src/rply.c src/rply.h
