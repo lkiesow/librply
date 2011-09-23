@@ -2,8 +2,8 @@
 #define PLY_H
 /* ----------------------------------------------------------------------
  * RPly library, read/write PLY files
- * Diego Nehab, Princeton University
- * http://www.cs.princeton.edu/~diego/professional/rply
+ * Diego Nehab, IMPA
+ * http://www.impa.br/~diego/software/rply
  *
  * This library is distributed under the MIT License. See notice
  * at the end of this file.
@@ -13,11 +13,9 @@
 extern "C" {
 #endif
 
-#define RPLY_VERSION   "RPly 1.01"
-#define RPLY_COPYRIGHT "Copyright (C) 2003-2005 Diego Nehab"
+#define RPLY_VERSION   "RPly 1.1"
+#define RPLY_COPYRIGHT "Copyright (C) 2003-2011 Diego Nehab"
 #define RPLY_AUTHORS   "Diego Nehab"
-
-#include <stdint.h>
 
 /* ----------------------------------------------------------------------
  * Types
@@ -46,24 +44,27 @@ typedef enum e_ply_type {
 } e_ply_type;   /* order matches ply_type_list */
 
 /* ----------------------------------------------------------------------
- * Property reading callback prototype
+ * Error callback prototype
  *
  * message: error message
+ * ply: handle returned by ply_open or ply_create
  * ---------------------------------------------------------------------- */
-typedef void (*p_ply_error_cb)(const char *message);
+typedef void (*p_ply_error_cb)(p_ply ply, const char *message);
 
 /* ----------------------------------------------------------------------
- * Opens a ply file for reading (fails if file is not a ply file)
+ * Opens a PLY file for reading (fails if file is not a PLY file)
  *
- * error_cb: error callback function
  * name: file name
+ * error_cb: error callback function
+ * idata,pdata: contextual information available to users
  *
  * Returns 1 if successful, 0 otherwise
  * ---------------------------------------------------------------------- */
-p_ply ply_open(const char *name, p_ply_error_cb error_cb);
+p_ply ply_open(const char *name, p_ply_error_cb error_cb, long idata, 
+        void *pdata);
 
 /* ----------------------------------------------------------------------
- * Reads and parses the header of a ply file returned by ply_open
+ * Reads and parses the header of a PLY file returned by ply_open
  *
  * ply: handle returned by ply_open
  *
@@ -92,9 +93,9 @@ typedef int (*p_ply_read_cb)(p_ply_argument argument);
  * Returns 0 if no element or no property in element, returns the
  * number of element instances otherwise. 
  * ---------------------------------------------------------------------- */
-int32_t ply_set_read_cb(p_ply ply, const char *element_name, 
+long ply_set_read_cb(p_ply ply, const char *element_name, 
         const char *property_name, p_ply_read_cb read_cb, 
-        void *pdata, int32_t idata);
+        void *pdata, long idata);
 
 /* ----------------------------------------------------------------------
  * Returns information about the element originating a callback
@@ -107,7 +108,7 @@ int32_t ply_set_read_cb(p_ply ply, const char *element_name,
  * Returns 1 if successfull, 0 otherwise
  * ---------------------------------------------------------------------- */
 int ply_get_argument_element(p_ply_argument argument, 
-        p_ply_element *element, int32_t *instance_index);
+        p_ply_element *element, long *instance_index);
 
 /* ----------------------------------------------------------------------
  * Returns information about the property originating a callback
@@ -120,7 +121,7 @@ int ply_get_argument_element(p_ply_argument argument,
  * Returns 1 if successfull, 0 otherwise
  * ---------------------------------------------------------------------- */
 int ply_get_argument_property(p_ply_argument argument, 
-        p_ply_property *property, int32_t *length, int32_t *value_index);
+        p_ply_property *property, long *length, long *value_index);
 
 /* ----------------------------------------------------------------------
  * Returns user data associated with callback 
@@ -131,7 +132,7 @@ int ply_get_argument_property(p_ply_argument argument,
  * Returns 1 if successfull, 0 otherwise
  * ---------------------------------------------------------------------- */
 int ply_get_argument_user_data(p_ply_argument argument, void **pdata, 
-        int32_t *idata);
+        long *idata);
 
 /* ----------------------------------------------------------------------
  * Returns the value associated with a callback
@@ -195,7 +196,7 @@ const char *ply_get_next_obj_info(p_ply ply, const char *last);
  * Returns 1 if successfull or 0 otherwise
  * ---------------------------------------------------------------------- */
 int ply_get_element_info(p_ply_element element, const char** name,
-        int32_t *ninstances);
+        long *ninstances);
 
 /* ----------------------------------------------------------------------
  * Iterates over all properties by returning the next property.
@@ -226,18 +227,18 @@ int ply_get_property_info(p_ply_property property, const char** name,
         e_ply_type *type, e_ply_type *length_type, e_ply_type *value_type);
 
 /* ----------------------------------------------------------------------
- * Creates new ply file
+ * Creates new PLY file
  *
  * name: file name
  * storage_mode: file format mode
  *
- * Returns handle to ply file if successfull, NULL otherwise
+ * Returns handle to PLY file if successfull, NULL otherwise
  * ---------------------------------------------------------------------- */
 p_ply ply_create(const char *name, e_ply_storage_mode storage_mode, 
-        p_ply_error_cb error_cb);
+        p_ply_error_cb error_cb, long idata, void *pdata);
 
 /* ----------------------------------------------------------------------
- * Adds a new element to the ply file created by ply_create
+ * Adds a new element to the PLY file created by ply_create
  *
  * ply: handle returned by ply_create
  * name: name of new element
@@ -245,7 +246,7 @@ p_ply ply_create(const char *name, e_ply_storage_mode storage_mode,
  *
  * Returns 1 if successfull, 0 otherwise
  * ---------------------------------------------------------------------- */
-int ply_add_element(p_ply ply, const char *name, int32_t ninstances);
+int ply_add_element(p_ply ply, const char *name, long ninstances);
 
 /* ----------------------------------------------------------------------
  * Adds a new property to the last element added by ply_add_element
@@ -306,7 +307,7 @@ int ply_add_comment(p_ply ply, const char *comment);
 int ply_add_obj_info(p_ply ply, const char *obj_info);
 
 /* ----------------------------------------------------------------------
- * Writes the ply file header after all element and properties have been
+ * Writes the PLY file header after all element and properties have been
  * defined by calls to ply_add_element and ply_add_property
  *
  * ply: handle returned by ply_create
@@ -329,7 +330,7 @@ int ply_write_header(p_ply ply);
 int ply_write(p_ply ply, double value);
 
 /* ----------------------------------------------------------------------
- * Closes a ply file handle. Releases all memory used by handle
+ * Closes a PLY file handle. Releases all memory used by handle
  *
  * ply: handle to be closed. 
  *
@@ -344,7 +345,7 @@ int ply_close(p_ply ply);
 #endif /* RPLY_H */
 
 /* ----------------------------------------------------------------------
- * Copyright (C) 2003-2005 Diego Nehab. All rights reserved.
+ * Copyright (C) 2003-2011 Diego Nehab. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the

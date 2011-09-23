@@ -1,11 +1,22 @@
-RPly 1.01-mod1
+RPly 1.1-mod0
 http://w3.impa.br/~diego/software/rply/
 
 Copyright © 2003-2005 Diego Nehab
   http://www.cs.princeton.edu/~diego
-Modified 2011-09-01 by Lars Kiesow
+
+Modified 2011-09 by Lars Kiesow
   http://larskiesow.de
   lkiesow@uos.de
+
+IMPORTANT
+====================
+The new version (RPly 1.1) now supports 64bit systems. I imported the new
+version. As the 64bit support was the major difference between librply and the
+old RPly version almost all modifications became obsolete.
+
+### So this is now merely a copy of RPly 1.1 with some additional examples and
+ ## Makefiles. The “important” code is the same as on the original RPly
+  # homepage.
 
 ABOUT
 ====================

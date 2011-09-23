@@ -15,7 +15,6 @@
 #include <stdio.h> 
 #include "rply.h"
 
-
 /*******************************************************************************
  *         Name:  main
  *  Description:  
@@ -23,7 +22,7 @@
 int main( int argc, char ** argv ) {
 
 	/* Create new PLY file. */
-	p_ply oply = ply_create( "new.ply", PLY_ASCII, NULL );
+	p_ply oply = ply_create( "new.ply", PLY_ASCII, NULL, 0, NULL );
 	if ( !oply ) {
 		fprintf( stderr, "ERROR: Could not create »new.ply«\n" );
 		return EXIT_FAILURE;

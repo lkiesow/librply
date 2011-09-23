@@ -14,8 +14,7 @@ static void setup_callbacks(p_ply iply, p_ply oply);
 
 /* given a format mode, an input file name and an output file name,
  * convert input file to output in given format mode */
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     const char *value = NULL;
     e_ply_storage_mode storage_mode = PLY_LITTLE_ENDIAN;
     const char *iname = NULL, *oname = NULL;
@@ -23,11 +22,11 @@ int main(int argc, char **argv)
     /* parse command line arguments */
     parse_arguments(argc, argv, &storage_mode, &iname, &oname);
     /* open input file and make sure we parsed its header */
-    iply = ply_open(iname, NULL);
+    iply = ply_open(iname, NULL, 0, NULL);
     if (!iply) error("Unable to open file '%s'", iname);
     if (!ply_read_header(iply)) error("Failed reading '%s' header", iname);
     /* create output file */
-    oply = ply_create(oname, storage_mode, NULL);
+    oply = ply_create(oname, storage_mode, NULL, 0, NULL);
     if (!oply) error("Unable to create file '%s'", oname);
     /* create elements and properties in output file and 
      * setup callbacks for them in input file */
@@ -52,8 +51,7 @@ int main(int argc, char **argv)
 }
 
 /* prints an error message and exits */
-static void error(const char *fmt, ...)
-{   
+static void error(const char *fmt, ...) {   
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
@@ -63,8 +61,7 @@ static void error(const char *fmt, ...)
 }               
 
 /* prints the help message and exits */
-static void help(void)
-{
+static void help(void) {
     error("Usage:\n"  
             "    convert <option> <input> <output>\n"
             "Options:\n"
@@ -76,8 +73,7 @@ static void help(void)
 /* parse command line parameters */
 static void parse_arguments(int argc, char **argv, 
         e_ply_storage_mode *storage_mode, 
-        const char **iname, const char **oname)
-{
+        const char **iname, const char **oname) {
     if (argc < 4) help();
     if (strcmp(argv[1], "--ascii") == 0 || 
             strcmp(argv[1], "-a") == 0)
@@ -94,8 +90,7 @@ static void parse_arguments(int argc, char **argv,
 }
 
 /* read callback */
-static int callback(p_ply_argument argument)
-{
+static int callback(p_ply_argument argument) {
     void *pdata;
     /* just pass the value from the input file to the output file */
     ply_get_argument_user_data(argument, &pdata, NULL);
@@ -104,13 +99,12 @@ static int callback(p_ply_argument argument)
 }
 
 /* prepares the conversion */
-static void setup_callbacks(p_ply iply, p_ply oply) 
-{
+static void setup_callbacks(p_ply iply, p_ply oply) {
     p_ply_element element = NULL;
     /* iterate over all elements in input file */
     while ((element = ply_get_next_element(iply, element))) {
         p_ply_property property = NULL;
-        int32_t ninstances = 0;
+        long ninstances = 0;
         const char *element_name;
         ply_get_element_info(element, &element_name, &ninstances);
         /* add this element to output file */

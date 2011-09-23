@@ -1,7 +1,7 @@
 /* ----------------------------------------------------------------------
  * RPly library, read/write PLY files
- * Diego Nehab, Princeton University
- * http://www.cs.princeton.edu/~diego/professional/rply
+ * Diego Nehab, IMPA
+ * http://www.impa.br/~diego/software/rply
  *
  * This library is distributed under the MIT License. See notice
  * at the end of this file.
@@ -17,6 +17,45 @@
 #include <stddef.h>
 
 #include "rply.h"
+
+/* ----------------------------------------------------------------------
+ * Make sure we get our integer types right
+ * ---------------------------------------------------------------------- */
+#ifdef _MSC_VER
+/* We are in 2006, and some compilers still fail to define C99 types! */
+typedef __int8 t_ply_int8;
+typedef __int16 t_ply_int16;
+typedef __int32 t_ply_int32;
+typedef unsigned __int8 t_ply_uint8;
+typedef unsigned __int16 t_ply_uint16;
+typedef unsigned __int32 t_ply_uint32;
+#define PLY_INT8_MAX (127)
+#define PLY_INT8_MIN (-PLY_INT8_MAX-1)
+#define PLY_INT16_MAX (32767)
+#define PLY_INT16_MIN (-PLY_INT16_MAX-1)
+#define PLY_INT32_MAX (2147483647)
+#define PLY_INT32_MIN (-PLY_INT32_MAX-1)
+#define PLY_UINT8_MAX (255)
+#define PLY_UINT16_MAX (65535)
+#define PLY_UINT32_MAX  (4294967295)
+#else
+#include <stdint.h>
+typedef int8_t t_ply_int8;
+typedef int16_t t_ply_int16;
+typedef int32_t t_ply_int32;
+typedef uint8_t t_ply_uint8;
+typedef uint16_t t_ply_uint16;
+typedef uint32_t t_ply_uint32;
+#define PLY_INT8_MIN INT8_MIN
+#define PLY_INT8_MAX INT8_MAX
+#define PLY_INT16_MIN INT16_MIN
+#define PLY_INT16_MAX INT16_MAX
+#define PLY_INT32_MIN INT32_MIN
+#define PLY_INT32_MAX INT32_MAX
+#define PLY_UINT8_MAX UINT8_MAX
+#define PLY_UINT16_MAX UINT16_MAX
+#define PLY_UINT32_MAX UINT32_MAX
+#endif
 
 /* ----------------------------------------------------------------------
  * Constants 
@@ -54,16 +93,16 @@ static const char *const ply_type_list[] = {
  * value: value of property
  * pdata/idata: user data defined with ply_set_cb
  *
- * Returns handle to ply file if succesful, NULL otherwise.
+ * Returns handle to PLY file if succesful, NULL otherwise.
  * ---------------------------------------------------------------------- */
 typedef struct t_ply_argument_ {
     p_ply_element element;
-    int32_t instance_index;
+    long instance_index;
     p_ply_property property;
-    int32_t length, value_index;
+    long length, value_index;
     double value;
     void *pdata;
-    int32_t idata;
+    long idata;
 } t_ply_argument;
 
 /* ----------------------------------------------------------------------
@@ -81,7 +120,7 @@ typedef struct t_ply_property_ {
     e_ply_type type, value_type, length_type;
     p_ply_read_cb read_cb;
     void *pdata;
-    int32_t idata;
+    long idata;
 } t_ply_property; 
 
 /* ----------------------------------------------------------------------
@@ -96,9 +135,9 @@ typedef struct t_ply_property_ {
  * ---------------------------------------------------------------------- */
 typedef struct t_ply_element_ {
     char name[WORDSIZE];
-    int32_t ninstances;
+    long ninstances;
     p_ply_property property;
-    int32_t nproperties;
+    long nproperties;
 } t_ply_element;
 
 /* ----------------------------------------------------------------------
@@ -138,7 +177,7 @@ typedef t_ply_odriver *p_ply_odriver;
  * obj_info: obj_info items for this file
  * nobj_infos: number of obj_info items in file
  * fp: file pointer associated with ply file
- * c: last character read from ply file
+ * rn: skip extra char after end_header? 
  * buffer: last word/chunck of data read from ply file
  * buffer_first, buffer_last: interval of untouched good data in buffer
  * buffer_token: start of parsed token (line or word) in buffer
@@ -148,27 +187,30 @@ typedef t_ply_odriver *p_ply_odriver;
  * winstance_index: index of instance of current element being written
  * wvalue_index: index of list property value being written 
  * wlength: number of values in list property being written
- * error_cb: callback for error messages
+ * error_cb: error callback
+ * pdata/idata: user data defined with ply_open/ply_create
  * ---------------------------------------------------------------------- */
 typedef struct t_ply_ {
     e_ply_io_mode io_mode;
     e_ply_storage_mode storage_mode;
     p_ply_element element;
-    int32_t nelements;
+    long nelements;
     char *comment;
-    int32_t ncomments;
+    long ncomments;
     char *obj_info;
-    int32_t nobj_infos;
+    long nobj_infos;
     FILE *fp;
-    int c;
+    int rn;
     char buffer[BUFFERSIZE];
     size_t buffer_first, buffer_token, buffer_last;
     p_ply_idriver idriver;
     p_ply_odriver odriver;
     t_ply_argument argument;
-    int32_t welement, wproperty;
-    int32_t winstance_index, wvalue_index, wlength;
+    long welement, wproperty;
+    long winstance_index, wvalue_index, wlength;
     p_ply_error_cb error_cb;
+    void *pdata;
+    long idata;
 } t_ply;
 
 /* ----------------------------------------------------------------------
@@ -183,6 +225,7 @@ static t_ply_odriver ply_odriver_binary_reverse;
 
 static int ply_read_word(p_ply ply);
 static int ply_check_word(p_ply ply);
+static void ply_finish_word(p_ply ply, size_t size);
 static int ply_read_line(p_ply ply);
 static int ply_check_line(p_ply ply);
 static int ply_read_chunk(p_ply ply, void *anybuffer, size_t size);
@@ -202,6 +245,7 @@ static p_ply_property ply_find_property(p_ply_element element,
 /* ----------------------------------------------------------------------
  * Header parsing
  * ---------------------------------------------------------------------- */
+static int ply_read_header_magic(p_ply ply); 
 static int ply_read_header_format(p_ply ply);
 static int ply_read_header_comment(p_ply ply);
 static int ply_read_header_obj_info(p_ply ply);
@@ -211,8 +255,8 @@ static int ply_read_header_element(p_ply ply);
 /* ----------------------------------------------------------------------
  * Error handling
  * ---------------------------------------------------------------------- */
-static void ply_error_cb(const char *message);
-static void ply_error(p_ply ply, const char *fmt, ...);
+static void ply_error_cb(p_ply ply, const char *message);
+static void ply_ferror(p_ply ply, const char *fmt, ...);
 
 /* ----------------------------------------------------------------------
  * Memory allocation and initialization
@@ -223,7 +267,7 @@ static void ply_property_init(p_ply_property property);
 static p_ply ply_alloc(void);
 static p_ply_element ply_grow_element(p_ply ply);
 static p_ply_property ply_grow_property(p_ply ply, p_ply_element element);
-static void *ply_grow_array(p_ply ply, void **pointer, int32_t *nmemb, int32_t size);
+static void *ply_grow_array(p_ply ply, void **pointer, long *nmemb, long size);
 
 /* ----------------------------------------------------------------------
  * Special functions
@@ -242,7 +286,6 @@ static int ply_read_list_property(p_ply ply, p_ply_element element,
         p_ply_property property, p_ply_argument argument);
 static int ply_read_scalar_property(p_ply ply, p_ply_element element, 
         p_ply_property property, p_ply_argument argument);
-
 
 /* ----------------------------------------------------------------------
  * Buffer support functions
@@ -284,49 +327,67 @@ static int BREFILL(p_ply ply) {
 /* ----------------------------------------------------------------------
  * Read support functions
  * ---------------------------------------------------------------------- */
-p_ply ply_open(const char *name, p_ply_error_cb error_cb) {
-    char magic[5] = "    ";
+/* We don't care about end-of-line, generally, because we
+ * separate words by any white-space character.
+ * Unfortunately, in binary mode, right after 'end_header', 
+ * we have to know *exactly* how many characters to skip */
+/* We use the end-of-line marker after the 'ply' magic
+ * number to figure out what to do */
+static int ply_read_header_magic(p_ply ply) {
+    char *magic = ply->buffer;
+    if (!BREFILL(ply)) {
+        ply->error_cb(ply, "Unable to read magic number from file");
+        return 0;
+    }
+    /* check if it is ply */
+    if (magic[0] != 'p' || magic[1] != 'l' || magic[2] != 'y' 
+            || !isspace(magic[3])) {
+        ply->error_cb(ply, "Wrong magic number. Expected 'ply'");
+        return 0;
+    }
+    /* figure out if we have to skip the extra character
+     * after header when we reach the binary part of file */
+    ply->rn = magic[3] == '\r' && magic[4] == '\n';
+    BSKIP(ply, 3);
+    return 1;
+}
+
+p_ply ply_open(const char *name, p_ply_error_cb error_cb, 
+        long idata, void *pdata) {
     FILE *fp = NULL; 
-    p_ply ply = NULL;
+    p_ply ply = ply_alloc();
     if (error_cb == NULL) error_cb = ply_error_cb;
+    if (!ply) {
+        error_cb(NULL, "Out of memory");
+        return NULL;
+    }
+    ply->idata = idata;
+    ply->pdata = pdata;
+    ply->io_mode = PLY_READ;
+    ply->error_cb = error_cb;
     if (!ply_type_check()) {
-        error_cb("Incompatible type system");
+        error_cb(ply, "Incompatible type system");
+        free(ply);
         return NULL;
     }
     assert(name);
     fp = fopen(name, "rb");
     if (!fp) {
-        error_cb("Unable to open file");
-        return NULL;
-    }
-    if (fread(magic, 1, 4, fp) < 4) {
-        error_cb("Error reading from file");
-        fclose(fp);
-        return NULL;
-    }
-    if (strcmp(magic, "ply\n")) {
-        fclose(fp);
-        error_cb("Not a PLY file. Expected magic number 'ply\\n'");
-        return NULL;
-    }
-    ply = ply_alloc();
-    if (!ply) {
-        error_cb("Out of memory");
-        fclose(fp);
+        error_cb(ply, "Unable to open file");
+        free(ply);
         return NULL;
     }
     ply->fp = fp;
-    ply->io_mode = PLY_READ;
-    ply->error_cb = error_cb;
     return ply;
 }
 
 int ply_read_header(p_ply ply) {
     assert(ply && ply->fp && ply->io_mode == PLY_READ);
+    if (!ply_read_header_magic(ply)) return 0;
     if (!ply_read_word(ply)) return 0;
     /* parse file format */
     if (!ply_read_header_format(ply)) {
-        ply_error(ply, "Invalid file format");
+        ply_ferror(ply, "Invalid file format");
         return 0;
     }
     /* parse elements, comments or obj_infos until the end of header */
@@ -334,16 +395,24 @@ int ply_read_header(p_ply ply) {
         if (!ply_read_header_comment(ply) && 
                 !ply_read_header_element(ply) && 
                 !ply_read_header_obj_info(ply)) {
-            ply_error(ply, "Unexpected token '%s'", BWORD(ply));
+            ply_ferror(ply, "Unexpected token '%s'", BWORD(ply));
             return 0;
         }
+    }
+    /* skip extra character? */
+    if (ply->rn) {
+        if (BSIZE(ply) < 1 && !BREFILL(ply)) {
+            ply_ferror(ply, "Unexpected end of file");
+            return 0;
+        }
+        BSKIP(ply, 1);
     }
     return 1;
 }
 
-int32_t ply_set_read_cb(p_ply ply, const char *element_name, 
+long ply_set_read_cb(p_ply ply, const char *element_name, 
         const char* property_name, p_ply_read_cb read_cb, 
-        void *pdata, int32_t idata) {
+        void *pdata, long idata) {
     p_ply_element element = NULL; 
     p_ply_property property = NULL;
     assert(ply && element_name && property_name);
@@ -358,7 +427,7 @@ int32_t ply_set_read_cb(p_ply ply, const char *element_name,
 }
 
 int ply_read(p_ply ply) {
-    int32_t i;
+    long i;
     p_ply_argument argument;
     assert(ply && ply->fp && ply->io_mode == PLY_READ);
     argument = &ply->argument;
@@ -376,26 +445,28 @@ int ply_read(p_ply ply) {
  * Write support functions
  * ---------------------------------------------------------------------- */
 p_ply ply_create(const char *name, e_ply_storage_mode storage_mode, 
-        p_ply_error_cb error_cb) {
+        p_ply_error_cb error_cb, long idata, void *pdata) {
     FILE *fp = NULL;
-    p_ply ply = NULL;
+    p_ply ply = ply_alloc();
     if (error_cb == NULL) error_cb = ply_error_cb;
+    if (!ply) {
+        error_cb(NULL, "Out of memory");
+        return NULL;
+    }
     if (!ply_type_check()) {
-        error_cb("Incompatible type system");
+        error_cb(ply, "Incompatible type system");
+        free(ply);
         return NULL;
     }
     assert(name && storage_mode <= PLY_DEFAULT);
     fp = fopen(name, "wb");
     if (!fp) {
-        error_cb("Unable to create file");
+        error_cb(ply, "Unable to create file");
+        free(ply);
         return NULL;
     }
-    ply = ply_alloc();
-    if (!ply) {
-        fclose(fp);
-        error_cb("Out of memory");
-        return NULL;
-    }
+    ply->idata = idata;
+    ply->pdata = pdata;
     ply->io_mode = PLY_WRITE;
     if (storage_mode == PLY_DEFAULT) storage_mode = ply_arch_endian();
     if (storage_mode == PLY_ASCII) ply->odriver = &ply_odriver_ascii;
@@ -408,12 +479,12 @@ p_ply ply_create(const char *name, e_ply_storage_mode storage_mode,
     return ply;
 }
 
-int ply_add_element(p_ply ply, const char *name, int32_t ninstances) {
+int ply_add_element(p_ply ply, const char *name, long ninstances) {
     p_ply_element element = NULL;
     assert(ply && ply->fp && ply->io_mode == PLY_WRITE);
     assert(name && strlen(name) < WORDSIZE && ninstances >= 0);
     if (strlen(name) >= WORDSIZE || ninstances < 0) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     element = ply_grow_element(ply);
@@ -430,7 +501,7 @@ int ply_add_scalar_property(p_ply ply, const char *name, e_ply_type type) {
     assert(name && strlen(name) < WORDSIZE);
     assert(type < PLY_LIST);
     if (strlen(name) >= WORDSIZE || type >= PLY_LIST) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     element = &ply->element[ply->nelements-1];
@@ -448,13 +519,13 @@ int ply_add_list_property(p_ply ply, const char *name,
     assert(ply && ply->fp && ply->io_mode == PLY_WRITE);
     assert(name && strlen(name) < WORDSIZE);
     if (strlen(name) >= WORDSIZE) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     assert(length_type < PLY_LIST);
     assert(value_type < PLY_LIST);
     if (length_type >= PLY_LIST || value_type >= PLY_LIST) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     element = &ply->element[ply->nelements-1];
@@ -479,7 +550,7 @@ int ply_add_comment(p_ply ply, const char *comment) {
     char *new_comment = NULL;
     assert(ply && comment && strlen(comment) < LINESIZE);
     if (!comment || strlen(comment) >= LINESIZE) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     new_comment = (char *) ply_grow_array(ply, (void **) &ply->comment,
@@ -493,7 +564,7 @@ int ply_add_obj_info(p_ply ply, const char *obj_info) {
     char *new_obj_info = NULL;
     assert(ply && obj_info && strlen(obj_info) < LINESIZE);
     if (!obj_info || strlen(obj_info) >= LINESIZE) {
-        ply_error(ply, "Invalid arguments");
+        ply_ferror(ply, "Invalid arguments");
         return 0;
     }
     new_obj_info = (char *) ply_grow_array(ply, (void **) &ply->obj_info,
@@ -504,7 +575,7 @@ int ply_add_obj_info(p_ply ply, const char *obj_info) {
 }
 
 int ply_write_header(p_ply ply) {
-    int32_t i, j;
+    long i, j;
     assert(ply && ply->fp && ply->io_mode == PLY_WRITE);
     assert(ply->element || ply->nelements == 0); 
     assert(!ply->element || ply->nelements > 0); 
@@ -520,7 +591,7 @@ int ply_write_header(p_ply ply) {
         p_ply_element element = &ply->element[i];
         assert(element->property || element->nproperties == 0); 
         assert(!element->property || element->nproperties > 0); 
-        if (fprintf(ply->fp, "element %s %d\n", element->name, 
+        if (fprintf(ply->fp, "element %s %ld\n", element->name, 
                     element->ninstances) <= 0) goto error;
         for (j = 0; j < element->nproperties; j++) {
             p_ply_property property = &element->property[j];
@@ -538,7 +609,7 @@ int ply_write_header(p_ply ply) {
     }
     return fprintf(ply->fp, "end_header\n") > 0;
 error:
-    ply_error(ply, "Error writing to file");
+    ply_ferror(ply, "Error writing to file");
     return 0;
 }
 
@@ -554,14 +625,14 @@ int ply_write(p_ply ply, double value) {
     if (property->type == PLY_LIST) {
         if (ply->wvalue_index == 0) {
             type = property->length_type;
-            ply->wlength = (int32_t) value;
+            ply->wlength = (long) value;
         } else type = property->value_type;
     } else {
         type = property->type;
         ply->wlength = 0;
     }
     if (!ply->odriver->ohandler[type](ply, value)) {
-        ply_error(ply, "Failed writing %s of %s %d (%s: %s)", 
+        ply_ferror(ply, "Failed writing %s of %s %d (%s: %s)", 
                     property->name, element->name, 
                     ply->winstance_index, 
                     ply->odriver->name, ply_type_list[type]);
@@ -585,14 +656,14 @@ int ply_write(p_ply ply, double value) {
 }
 
 int ply_close(p_ply ply) {
-    int32_t i;
+    long i;
     assert(ply && ply->fp);
     assert(ply->element || ply->nelements == 0);
     assert(!ply->element || ply->nelements > 0);
     /* write last chunk to file */
     if (ply->io_mode == PLY_WRITE && 
       fwrite(ply->buffer, 1, ply->buffer_last, ply->fp) < ply->buffer_last) {
-        ply_error(ply, "Error closing up");
+        ply_ferror(ply, "Error closing up");
         return 0;
     }
     fclose(ply->fp);
@@ -623,10 +694,10 @@ p_ply_element ply_get_next_element(p_ply ply,
 }
 
 int ply_get_element_info(p_ply_element element, const char** name,
-        int32_t *ninstances) {
+        long *ninstances) {
     assert(element);
     if (name) *name = element->name;
-    if (ninstances) *ninstances = (int32_t) element->ninstances;
+    if (ninstances) *ninstances = (long) element->ninstances;
     return 1;
 }
 
@@ -670,7 +741,7 @@ const char *ply_get_next_obj_info(p_ply ply, const char *last) {
  * Callback argument support functions 
  * ---------------------------------------------------------------------- */
 int ply_get_argument_element(p_ply_argument argument, 
-        p_ply_element *element, int32_t *instance_index) {
+        p_ply_element *element, long *instance_index) {
     assert(argument);
     if (!argument) return 0;
     if (element) *element = argument->element;
@@ -679,7 +750,7 @@ int ply_get_argument_element(p_ply_argument argument,
 }
 
 int ply_get_argument_property(p_ply_argument argument, 
-        p_ply_property *property, int32_t *length, int32_t *value_index) {
+        p_ply_property *property, long *length, long *value_index) {
     assert(argument);
     if (!argument) return 0;
     if (property) *property = argument->property;
@@ -689,7 +760,7 @@ int ply_get_argument_property(p_ply_argument argument,
 }
 
 int ply_get_argument_user_data(p_ply_argument argument, void **pdata, 
-        int32_t *idata) {
+        long *idata) {
     assert(argument);
     if (!argument) return 0;
     if (pdata) *pdata = argument->pdata;
@@ -715,33 +786,33 @@ static int ply_read_list_property(p_ply ply, p_ply_element element,
     p_ply_ihandler handler = driver[property->length_type];
     double length;
     if (!handler(ply, &length)) {
-        ply_error(ply, "Error reading '%s' of '%s' number %d",
+        ply_ferror(ply, "Error reading '%s' of '%s' number %d",
                 property->name, element->name, argument->instance_index);
         return 0;
     }
     /* invoke callback to pass length in value field */
-    argument->length = (int32_t) length;
+    argument->length = (long) length;
     argument->value_index = -1;
     argument->value = length;
     if (read_cb && !read_cb(argument)) {
-        ply_error(ply, "Aborted by user");
+        ply_ferror(ply, "Aborted by user");
         return 0;
     }
     /* read list values */
     handler = driver[property->value_type];
     /* for each value in list */
-    for (l = 0; l < (int32_t) length; l++) {
+    for (l = 0; l < (long) length; l++) {
         /* read value from file */
         argument->value_index = l;
         if (!handler(ply, &argument->value)) {
-            ply_error(ply, "Error reading value number %d of '%s' of "
+            ply_ferror(ply, "Error reading value number %d of '%s' of "
                     "'%s' number %d", l+1, property->name, 
                     element->name, argument->instance_index);
             return 0;
         }
         /* invoke callback to pass value */
         if (read_cb && !read_cb(argument)) {
-            ply_error(ply, "Aborted by user");
+            ply_ferror(ply, "Aborted by user");
             return 0;
         }
     }
@@ -756,12 +827,12 @@ static int ply_read_scalar_property(p_ply ply, p_ply_element element,
     argument->length = 1;
     argument->value_index = 0;
     if (!handler(ply, &argument->value)) {
-        ply_error(ply, "Error reading '%s' of '%s' number %d",
+        ply_ferror(ply, "Error reading '%s' of '%s' number %d",
                 property->name, element->name, argument->instance_index);
         return 0;
     }
     if (read_cb && !read_cb(argument)) {
-        ply_error(ply, "Aborted by user");
+        ply_ferror(ply, "Aborted by user");
         return 0;
     }
     return 1;
@@ -777,7 +848,7 @@ static int ply_read_property(p_ply ply, p_ply_element element,
 
 static int ply_read_element(p_ply ply, p_ply_element element, 
         p_ply_argument argument) {
-    int32_t j, k;
+    long j, k;
     /* for each element of this type */
     for (j = 0; j < element->ninstances; j++) {
         argument->instance_index = j;
@@ -830,8 +901,12 @@ static p_ply_property ply_find_property(p_ply_element element,
 }
 
 static int ply_check_word(p_ply ply) {
-    if (strlen(BLINE(ply)) >= WORDSIZE) {
-        ply_error(ply, "Word too int32_t");
+    size_t size = strlen(BWORD(ply));
+    if (size >= WORDSIZE) {
+        ply_ferror(ply, "Word too long");
+        return 0;
+    } else if (size == 0) {
+        ply_ferror(ply, "Unexpected end of file");
         return 0;
     }
     return 1;
@@ -846,7 +921,7 @@ static int ply_read_word(p_ply ply) {
         /* check if all buffer was made of blanks */
         if (t >= BSIZE(ply)) {
             if (!BREFILL(ply)) {
-                ply_error(ply, "Unexpected end of file");
+                ply_ferror(ply, "Unexpected end of file");
                 return 0;
             }
         } else break; 
@@ -856,35 +931,39 @@ static int ply_read_word(p_ply ply) {
     t = strcspn(BFIRST(ply), " \n\r\t");
     /* if we didn't reach the end of the buffer, we are done */
     if (t < BSIZE(ply)) {
-        ply->buffer_token = ply->buffer_first;
-        BSKIP(ply, t);
-        *BFIRST(ply) = '\0';
-        BSKIP(ply, 1);
+        ply_finish_word(ply, t);
         return ply_check_word(ply);
     }
     /* otherwise, try to refill buffer */
     if (!BREFILL(ply)) {
-        ply_error(ply, "Unexpected end of file");
-        return 0;
+        /* if we reached the end of file, try to do with what we have */
+        ply_finish_word(ply, t);
+        return ply_check_word(ply);
+        /* ply_ferror(ply, "Unexpected end of file"); */
+        /* return 0; */
     }
     /* keep looking from where we left */
     t += strcspn(BFIRST(ply) + t, " \n\r\t");
     /* check if the token is too large for our buffer */
     if (t >= BSIZE(ply)) {
-        ply_error(ply, "Token too large");
+        ply_ferror(ply, "Token too large");
         return 0;
     }
     /* we are done */
+    ply_finish_word(ply, t);
+    return ply_check_word(ply);
+}
+
+static void ply_finish_word(p_ply ply, size_t size) {
     ply->buffer_token = ply->buffer_first;
-    BSKIP(ply, t);
+    BSKIP(ply, size);
     *BFIRST(ply) = '\0';
     BSKIP(ply, 1);
-    return ply_check_word(ply);
 }
 
 static int ply_check_line(p_ply ply) {
     if (strlen(BLINE(ply)) >= LINESIZE) {
-        ply_error(ply, "Line too int32_t");
+        ply_ferror(ply, "Line too long");
         return 0;
     }
     return 1;
@@ -906,7 +985,7 @@ static int ply_read_line(p_ply ply) {
         end = ply->buffer + BSIZE(ply); 
         /* otherwise, try to refill buffer */
         if (!BREFILL(ply)) {
-            ply_error(ply, "Unexpected end of file");
+            ply_ferror(ply, "Unexpected end of file");
             return 0;
         }
     }
@@ -914,7 +993,7 @@ static int ply_read_line(p_ply ply) {
     end = strchr(end, '\n');
     /* check if the token is too large for our buffer */
     if (!end) {
-        ply_error(ply, "Token too large");
+        ply_ferror(ply, "Token too large");
         return 0;
     }
     /* we are done */
@@ -989,7 +1068,6 @@ static void ply_reverse(void *anydata, size_t size) {
 }
 
 static void ply_init(p_ply ply) {
-    ply->c = ' ';
     ply->element = NULL;
     ply->nelements = 0;
     ply->comment = NULL;
@@ -1032,13 +1110,13 @@ static p_ply ply_alloc(void) {
 }
 
 static void *ply_grow_array(p_ply ply, void **pointer, 
-        int32_t *nmemb, int32_t size) {
+        long *nmemb, long size) {
     void *temp = *pointer;
-    int32_t count = *nmemb + 1;
+    long count = *nmemb + 1;
     if (!temp) temp = malloc(count*size);
     else temp = realloc(temp, count*size);
     if (!temp) {
-        ply_error(ply, "Out of memory");
+        ply_ferror(ply, "Out of memory");
         return NULL;
     }
     *pointer = temp;
@@ -1136,7 +1214,7 @@ static int ply_read_header_property(p_ply ply) {
 
 static int ply_read_header_element(p_ply ply) {
     p_ply_element element = NULL;
-    int32_t dummy;
+    long dummy;
     assert(ply && ply->fp && ply->io_mode == PLY_READ);
     if (strcmp(BWORD(ply), "element")) return 0;
     /* allocate room for new element */
@@ -1147,8 +1225,8 @@ static int ply_read_header_element(p_ply ply) {
     strcpy(element->name, BWORD(ply));
     /* get number of elements of this type */
     if (!ply_read_word(ply)) return 0;
-    if (sscanf(BWORD(ply), "%d", &dummy) != 1) {
-        ply_error(ply, "Expected number got '%s'", BWORD(ply));
+    if (sscanf(BWORD(ply), "%ld", &dummy) != 1) {
+        ply_ferror(ply, "Expected number got '%s'", BWORD(ply));
         return 0;
     }
     element->ninstances = dummy;
@@ -1160,41 +1238,42 @@ static int ply_read_header_element(p_ply ply) {
     return 1;
 }
 
-static void ply_error_cb(const char *message) {
+static void ply_error_cb(p_ply ply, const char *message) {
+    (void) ply;
     fprintf(stderr, "RPly: %s\n", message);
 }
 
-static void ply_error(p_ply ply, const char *fmt, ...) {
+static void ply_ferror(p_ply ply, const char *fmt, ...) {
     char buffer[1024];
     va_list ap;
     va_start(ap, fmt);
     vsprintf(buffer, fmt, ap);
     va_end(ap);
-    ply->error_cb(buffer);
+    ply->error_cb(ply, buffer);
 }
 
 static e_ply_storage_mode ply_arch_endian(void) {
-    uint32_t i = 1;
+    unsigned long i = 1;
     unsigned char *s = (unsigned char *) &i;
     if (*s == 1) return PLY_LITTLE_ENDIAN;
     else return PLY_BIG_ENDIAN;
 }
 
 static int ply_type_check(void) {
-    assert(sizeof(char) == 1);
-    assert(sizeof(unsigned char) == 1);
-    assert(sizeof(short) == 2);
-    assert(sizeof(unsigned short) == 2);
-    assert(sizeof(int32_t) == 4);
-    assert(sizeof(uint32_t) == 4);
+    assert(sizeof(t_ply_int8) == 1);
+    assert(sizeof(t_ply_uint8) == 1);
+    assert(sizeof(t_ply_int16) == 2);
+    assert(sizeof(t_ply_uint16) == 2);
+    assert(sizeof(t_ply_int32) == 4);
+    assert(sizeof(t_ply_uint32) == 4);
     assert(sizeof(float) == 4);
     assert(sizeof(double) == 8);
-    if (sizeof(char) != 1) return 0;
-    if (sizeof(unsigned char) != 1) return 0;
-    if (sizeof(short) != 2) return 0;
-    if (sizeof(unsigned short) != 2) return 0;
-    if (sizeof(int32_t) != 4) return 0;
-    if (sizeof(uint32_t) != 4) return 0;
+    if (sizeof(t_ply_int8) != 1) return 0;
+    if (sizeof(t_ply_uint8) != 1) return 0;
+    if (sizeof(t_ply_int16) != 2) return 0;
+    if (sizeof(t_ply_uint16) != 2) return 0;
+    if (sizeof(t_ply_int32) != 4) return 0;
+    if (sizeof(t_ply_uint32) != 4) return 0;
     if (sizeof(float) != 4) return 0;
     if (sizeof(double) != 8) return 0;
     return 1;
@@ -1204,33 +1283,33 @@ static int ply_type_check(void) {
  * Output handlers
  * ---------------------------------------------------------------------- */
 static int oascii_int8(p_ply ply, double value) {
-    if (value > CHAR_MAX || value < CHAR_MIN) return 0;
-    return fprintf(ply->fp, "%d ", (char) value) > 0;
+    if (value > PLY_INT8_MAX || value < PLY_INT8_MIN) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_int8) value) > 0;
 }
 
 static int oascii_uint8(p_ply ply, double value) {
-    if (value > UCHAR_MAX || value < 0) return 0;
-    return fprintf(ply->fp, "%d ", (unsigned char) value) > 0;
+    if (value > PLY_UINT8_MAX || value < 0) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_uint8) value) > 0;
 }
 
 static int oascii_int16(p_ply ply, double value) {
-    if (value > SHRT_MAX || value < SHRT_MIN) return 0;
-    return fprintf(ply->fp, "%d ", (short) value) > 0;
+    if (value > PLY_INT16_MAX || value < PLY_INT16_MIN) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_int16) value) > 0;
 }
 
 static int oascii_uint16(p_ply ply, double value) {
-    if (value > USHRT_MAX || value < 0) return 0;
-    return fprintf(ply->fp, "%d ", (unsigned short) value) > 0;
+    if (value > PLY_UINT16_MAX || value < 0) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_uint16) value) > 0;
 }
 
 static int oascii_int32(p_ply ply, double value) {
-    if (value > LONG_MAX || value < LONG_MIN) return 0;
-    return fprintf(ply->fp, "%d ", (int) value) > 0;
+    if (value > PLY_INT32_MAX || value < PLY_INT32_MIN) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_int32) value) > 0;
 }
 
 static int oascii_uint32(p_ply ply, double value) {
-    if (value > ULONG_MAX || value < 0) return 0;
-    return fprintf(ply->fp, "%d ", (unsigned int) value) > 0;
+    if (value > PLY_UINT32_MAX || value < 0) return 0;
+    return fprintf(ply->fp, "%d ", (t_ply_uint32) value) > 0;
 }
 
 static int oascii_float32(p_ply ply, double value) {
@@ -1244,38 +1323,38 @@ static int oascii_float64(p_ply ply, double value) {
 }
 
 static int obinary_int8(p_ply ply, double value) {
-    char int8 = (char) value;
-    if (value > CHAR_MAX || value < CHAR_MIN) return 0;
+    t_ply_int8 int8 = (t_ply_int8) value;
+    if (value > PLY_INT8_MAX || value < PLY_INT8_MIN) return 0;
     return ply->odriver->ochunk(ply, &int8, sizeof(int8));
 }
 
 static int obinary_uint8(p_ply ply, double value) {
-    unsigned char uint8 = (unsigned char) value;
-    if (value > UCHAR_MAX || value < 0) return 0;
+    t_ply_uint8 uint8 = (t_ply_uint8) value;
+    if (value > PLY_UINT8_MAX || value < 0) return 0;
     return ply->odriver->ochunk(ply, &uint8, sizeof(uint8)); 
 }
 
 static int obinary_int16(p_ply ply, double value) {
-    short int16 = (short) value;
-    if (value > SHRT_MAX || value < SHRT_MIN) return 0;
+    t_ply_int16 int16 = (t_ply_int16) value;
+    if (value > PLY_INT16_MAX || value < PLY_INT16_MIN) return 0;
     return ply->odriver->ochunk(ply, &int16, sizeof(int16));
 }
 
 static int obinary_uint16(p_ply ply, double value) {
-    unsigned short uint16 = (unsigned short) value;
-    if (value > USHRT_MAX || value < 0) return 0;
+    t_ply_uint16 uint16 = (t_ply_uint16) value;
+    if (value > PLY_UINT16_MAX || value < 0) return 0;
     return ply->odriver->ochunk(ply, &uint16, sizeof(uint16)); 
 }
 
 static int obinary_int32(p_ply ply, double value) {
-    int32_t int32 = (int32_t) value;
-    if (value > LONG_MAX || value < LONG_MIN) return 0;
+    t_ply_int32 int32 = (t_ply_int32) value;
+    if (value > PLY_INT32_MAX || value < PLY_INT32_MIN) return 0;
     return ply->odriver->ochunk(ply, &int32, sizeof(int32));
 }
 
 static int obinary_uint32(p_ply ply, double value) {
-    uint32_t uint32 = (uint32_t) value;
-    if (value > ULONG_MAX || value < 0) return 0;
+    t_ply_uint32 uint32 = (t_ply_uint32) value;
+    if (value > PLY_UINT32_MAX || value < 0) return 0;
     return ply->odriver->ochunk(ply, &uint32, sizeof(uint32));
 }
 
@@ -1296,7 +1375,7 @@ static int iascii_int8(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value > CHAR_MAX || *value < CHAR_MIN) return 0;
+    if (*end || *value > PLY_INT8_MAX || *value < PLY_INT8_MIN) return 0;
     return 1;
 }
 
@@ -1304,7 +1383,7 @@ static int iascii_uint8(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value > UCHAR_MAX || *value < 0) return 0;
+    if (*end || *value > PLY_UINT8_MAX || *value < 0) return 0;
     return 1;
 }
 
@@ -1312,7 +1391,7 @@ static int iascii_int16(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value > SHRT_MAX || *value < SHRT_MIN) return 0;
+    if (*end || *value > PLY_INT16_MAX || *value < PLY_INT16_MIN) return 0;
     return 1;
 }
 
@@ -1320,7 +1399,7 @@ static int iascii_uint16(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value > USHRT_MAX || *value < 0) return 0;
+    if (*end || *value > PLY_UINT16_MAX || *value < 0) return 0;
     return 1;
 }
 
@@ -1328,7 +1407,7 @@ static int iascii_int32(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value > LONG_MAX || *value < LONG_MIN) return 0;
+    if (*end || *value > PLY_INT32_MAX || *value < PLY_INT32_MIN) return 0;
     return 1;
 }
 
@@ -1336,7 +1415,7 @@ static int iascii_uint32(p_ply ply, double *value) {
     char *end;
     if (!ply_read_word(ply)) return 0;
     *value = strtol(BWORD(ply), &end, 10);
-    if (*end || *value < 0) return 0;
+    if (*end || *value > PLY_UINT32_MAX || *value < 0) return 0;
     return 1;
 }
 
@@ -1357,42 +1436,42 @@ static int iascii_float64(p_ply ply, double *value) {
 }
 
 static int ibinary_int8(p_ply ply, double *value) {
-    char int8;
+    t_ply_int8 int8;
     if (!ply->idriver->ichunk(ply, &int8, 1)) return 0;
     *value = int8;
     return 1;
 }
 
 static int ibinary_uint8(p_ply ply, double *value) {
-    unsigned char uint8;
+    t_ply_uint8 uint8;
     if (!ply->idriver->ichunk(ply, &uint8, 1)) return 0;
     *value = uint8;
     return 1;
 }
 
 static int ibinary_int16(p_ply ply, double *value) {
-    short int16;
+    t_ply_int16 int16;
     if (!ply->idriver->ichunk(ply, &int16, sizeof(int16))) return 0;
     *value = int16;
     return 1;
 }
 
 static int ibinary_uint16(p_ply ply, double *value) {
-    unsigned short uint16;
+    t_ply_uint16 uint16;
     if (!ply->idriver->ichunk(ply, &uint16, sizeof(uint16))) return 0;
     *value = uint16;
     return 1;
 }
 
 static int ibinary_int32(p_ply ply, double *value) {
-    int32_t int32;
+    t_ply_int32 int32;
     if (!ply->idriver->ichunk(ply, &int32, sizeof(int32))) return 0;
     *value = int32;
     return 1;
 }
 
 static int ibinary_uint32(p_ply ply, double *value) {
-    uint32_t uint32;
+    t_ply_uint32 uint32;
     if (!ply->idriver->ichunk(ply, &uint32, sizeof(uint32))) return 0;
     *value = uint32;
     return 1;
@@ -1402,7 +1481,6 @@ static int ibinary_float32(p_ply ply, double *value) {
     float float32;
     if (!ply->idriver->ichunk(ply, &float32, sizeof(float32))) return 0;
     *value = float32;
-    ply_reverse(&float32, sizeof(float32));
     return 1;
 }
 
@@ -1474,7 +1552,7 @@ static t_ply_odriver ply_odriver_binary_reverse = {
 };
 
 /* ----------------------------------------------------------------------
- * Copyright (C) 2003 Diego Nehab.  All rights reserved.
+ * Copyright (C) 2003-2011 Diego Nehab.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
