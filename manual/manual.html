@@ -39,9 +39,8 @@ models, but is general enough to be useful for other purposes.
 </p>
 
 <p>There are other libraries out there, of course. I tried using them and
-finally decided to write my own. I tried to write it in such a way that
-others won't have to do it again and again. Everything that made me unhappy
-about the existing libraries was eliminated from RPly.</p>
+finally decided to write my own. The result is RPly, and I
+hope you are as happy with it as I am. </p>
 
 <p>RPly is easy to use, well documented, small, free,
 open-source, ANSI C, efficient, and well tested. I will keep supporting it
@@ -74,29 +73,32 @@ In practice, the library works with all PLY files that I could find.  </p>
 <h2>Download</h2>
 
 <p>
-Version 1.01 of RPly is available for download in source
-code from <a href=rply-1.01.tar.gz>this link</a>. Examples and documentation 
+Version 1.1.1 of RPly is available for download in source
+code from <a href=rply-1.1.1.tar.gz>this link</a>. Examples and documentation 
 are packed inside the tar ball. Have fun!
 </p>
 
 <p>
-Copyright &copy; 2003-2005 Diego Nehab. All rights reserved. <br>
-Author: <A href="http://www.cs.princeton.edu/~diego">Diego Nehab</a>
+Copyright &copy; 2003-2011 Diego Nehab. All rights reserved. <br>
+Author: <A href="http://www.impa.br/~diego">Diego Nehab</a>
 </p>
 
 <h2>What's new?</h2>
 
-<p>
-The change for version 1.01 is the use of our own buffering code when
-reading ASCII files. Speedup factor of 5 in Linux, almost no change in
-Windows.
-</p>
+<ul>
+<li> Support for 64-bit architectures using C99's
+<tt>&lt;stdint.h&gt;</tt>;
+<li> Support for the LF, CR+LF, and CR end-of-line conventions in ASCII PLY files;
+<li> Support for (broken) ASCII PLY files that don't end with a end-of-line marker;
+<li> Error callback now receives the PLY handle from which user data can be obtained.
+<li> Manual updated to describe these changes.
+</ul>
 
 <h2> RPly's idea of what a PLY file is </h2>
 
 <p> A PLY file contains the description of one object. This object is
 composed by <em>elements</em>, each element type
-being composed by a group of <em>properties</em>.  The PLY file
+being defined by a group of <em>properties</em>.  The PLY file
 format specifies a syntax for the description of element types and the
 properties that compose them, as well as comments and meta-information.
 </p>
@@ -127,7 +129,10 @@ end_header
 
 <p> The header goes from the first line to the line marked by
 <tt>end_header</tt>.  The first line contains only <tt>ply\n</tt> and is
-used to detect whether a file is in PLY format or not.  The second line
+used to detect whether a file is in PLY format or not (RPly
+also accepts files that start with <tt>ply\r\n</tt>, in
+which case the end-of-line terminator is assumed to be
+<tt>\r\n</tt> throughout.)  The second line
 specifies the <tt>format</tt> number (which is always <tt>1.0</tt>) and the
 storage mode (<tt>ascii</tt>, <tt>binary_big_endian</tt> or
 <tt>binary_little_endian</tt>).  </p>
@@ -172,7 +177,7 @@ single list of type <tt>vertex_indices</tt> containing 3 values
 <h2> How to read a file with RPly </h2>
 
 <p> Most users that want to read a PLY file already know which elements and
-properties they are interested at. In the following example, we will
+properties they are interested in. In the following example, we will
 implement a simple program that dumps the contents of a PLY file to the
 terminal, in a different, simpler format that only works for triangles.
 </p>
@@ -214,7 +219,7 @@ static int face_cb(p_ply_argument argument) {
 
 int main(void) {
     long nvertices, ntriangles;
-    p_ply ply = ply_open("input.ply", NULL);
+    p_ply ply = ply_open("input.ply", NULL, 0, NULL);
     if (!ply) return 1;
     if (!ply_read_header(ply)) return 1;
     nvertices = ply_set_read_cb(ply, "vertex", "x", vertex_cb, NULL, 0);
@@ -239,7 +244,7 @@ file.</em></p>
 <p> To keep things simple, values are always passed as <tt>double</tt>,
 regardless of how they are stored in the file. From its parameters,
 callbacks can find out exactly which part of the file is being processed
-(including the real type of the value), plus access custom information
+(including the actual type of the value), plus access custom information
 provided by the user in the form of a pointer and an integer constant. </p>
 
 <p> In our example, we start with a call to <tt>ply_open</tt> to open a
@@ -343,13 +348,13 @@ static int setup_callbacks(p_ply iply, p_ply oply) {
     return 1;
 }
 
-int main(void) {
+int main(int argc, char *argv[]) {
     const char *value;
     p_ply iply, oply; 
-    iply = ply_open("input.ply", NULL);
+    iply = ply_open("input.ply", NULL, 0, NULL);
     if (!iply) return 1; 
     if (!ply_read_header(iply)) return 1; 
-    oply = ply_create("output.ply", PLY_LITTLE_ENDIAN, NULL);
+    oply = ply_create("output.ply", PLY_LITTLE_ENDIAN, NULL, 0, NULL);
     if (!oply) return 1;
     if (!setup_callbacks(iply, oply)) return 1; 
     /* pass comments and obj_infos from input to output */
@@ -386,12 +391,42 @@ PLY handle as the context pointer. Each time it is called, it  passes the
 received value to <tt>ply_write</tt> on the output handle. It is as simple
 as that. </p>
 
+<h2> A note on locale </h2>
+
+<p> ASCII PLY files are supposed to use the <tt>C</tt>
+locale for numeric formatting. RPly relies on library
+functions (such as <tt>fprintf</tt> and <tt>strtod</tt>)
+that are affected by the current locale. If your software
+modifies the locale (or if it uses another library/toolkit that
+does) and you use RPly under the modified locale, you may be 
+unable to read or write properly formatted ASCII PLY files.
+</p>
+
+<p> Modifying RPly internally to hedge against different
+locales would be complicated, particularly in multi-threaded
+applications.  Therefore, RPly leaves this as your
+responsibility. To protect against locale problems in the
+simplest scenario, you should bracket RPly I/O as follows: </p>
+
+<pre class="example">
+#include &lt;locale.h&gt;
+/* Save application locale */
+const char *old_locale = setlocale(LC_NUMERIC, NULL);
+/* Change to PLY standard */
+setlocale(LC_NUMERIC, "C");
+/* Use the RPly library */
+...
+
+/* Restore application locale when done */
+setlocale(LC_NUMERIC, old_locale);
+</pre>
+
 <h1>Reference Manual</h1>
 
 <!-- ply_open ++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
 
 <p class=name id=ply_open>
-p_ply <b>ply_open</b>(const char *name, p_ply_error_cb error_cb)
+p_ply <b>ply_open</b>(const char *name, p_ply_error_cb error_cb, long idata, void *pdata)
 </p>
 
 <p class=description>
@@ -402,6 +437,10 @@ and returns a handle to it.
 <p class=arguments>
 <tt>Name</tt> is the file name, and <tt>error_cb</tt> is a function to
 be called when an error is found. 
+Arguments <tt>idata</tt>
+and <tt>pdata</tt> are available to the error callback via the
+<a href=#ply_get_ply_user_data><tt>ply_get_ply_user_data</tt></a> 
+function.  
 If <tt>error_cb</tt> is NULL, the default
 error callback is used. It prints a message to the standard error stream.
 </p>
@@ -412,8 +451,30 @@ Returns a handle to the file or NULL on error.
 
 <p class=note>
 Note: <tt>Error_cb</tt> is of type <tt>void
-    (*p_ply_error_cb)(const char *message)</tt>
+    (*p_ply_error_cb)(p_ply ply, const char *message)</tt>.
 </p>
+
+<!-- ply_get_ply_user_data ++++++++++++++++++++++++++++++++++++++++ -->
+
+<p class=name id=ply_get_ply_user_data>
+int <b>ply_get_ply_user_data</b>(p_ply_ply ply, void *pdata, long *idata)
+</p>
+
+<p class=description>
+Retrieves user data from the ply handle. 
+</p>
+
+<p class=arguments>
+<tt>Ply</tt> is the handle passed to the error callback.
+<tt>Pdata</tt> receives the user data pointer.
+<tt>Idata</tt> receives the user data integer.
+<tt>Pdata</tt> and <tt>idata</tt> can be NULL.
+</p>
+
+<p class=return>
+Returns 1 in case of success, 0 otherwise. 
+</p>
+
 
 <!-- ply_read_header +++++++++++++++++++++++++++++++++++++++++++++++++ -->
 
@@ -769,7 +830,14 @@ Creates a PLY file for writing.
 
 <p class=arguments>
 <tt>Name</tt> is the file name, <tt>storage_mode</tt> is the file storage mode
-(<tt>PLY_ASCII</tt>, <tt>PLY_LITTLE_ENDIAN</tt> or <tt>PLY_BIG_ENDIAN</tt>). <tt>Error_cb</tt> is a function to be called when an error is found. 
+(<tt>PLY_ASCII</tt>, <tt>PLY_LITTLE_ENDIAN</tt>,
+<tt>PLY_BIG_ENDIAN</tt>, or <tt>PLY_DEFAULT</tt> to
+automatically detect host endianess). 
+<tt>Error_cb</tt> is a function to be called when an error is found. 
+Arguments <tt>idata</tt>
+and <tt>pdata</tt> are available to the error callback via the
+<a href=#ply_get_ply_user_data><tt>ply_get_ply_user_data</tt></a> 
+function.  
 If <tt>error_cb</tt> is NULL, the default
 error callback is used. It prints a message to the standard error stream.
 </p>
@@ -983,7 +1051,7 @@ Returns 1 in case of success, 0 otherwise.
 <p>
 <small>
 Last modified by Diego Nehab on <br>
-Fri Jul 16 15:23:01 EDT 2004
+Tue Oct  4 18:47:20 BRT 2011
 </small>
 </p>
 </center>
