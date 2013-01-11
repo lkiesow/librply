@@ -650,7 +650,10 @@ int ply_write(p_ply ply, double value) {
     }
     if (ply->winstance_index >= element->ninstances) {
         ply->winstance_index = 0;
-        ply->welement++;
+        do {
+            ply->welement++;
+            element = &ply->element[ply->welement];
+        } while (ply->welement < ply->nelements && !element->ninstances);
     }
     return !breakafter || putc('\n', ply->fp) > 0;
 }

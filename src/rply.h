@@ -1,5 +1,5 @@
-#ifndef PLY_H
-#define PLY_H
+#ifndef RPLY_H
+#define RPLY_H
 /* ----------------------------------------------------------------------
  * RPly library, read/write PLY files
  * Diego Nehab, IMPA
@@ -13,8 +13,8 @@
 extern "C" {
 #endif
 
-#define RPLY_VERSION   "RPly 1.1.1"
-#define RPLY_COPYRIGHT "Copyright (C) 2003-2011 Diego Nehab"
+#define RPLY_VERSION   "RPly 1.1.2"
+#define RPLY_COPYRIGHT "Copyright (C) 2003-2012 Diego Nehab"
 #define RPLY_AUTHORS   "Diego Nehab"
 
 /* ----------------------------------------------------------------------

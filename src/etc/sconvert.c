@@ -26,8 +26,8 @@ static int setup_callbacks(p_ply iply, p_ply oply) {
             ply_get_property_info(property, &property_name, &type, 
                     &length_type, &value_type);
             /* setup input callback for this property */
-            if (!ply_set_read_cb(iply, element_name, property_name, callback, 
-                    oply, 0)) return 0;
+            ply_set_read_cb(iply, element_name, property_name, callback, 
+                oply, 0);
             /* add this property to output file */
             if (!ply_add_property(oply, property_name, type, length_type, 
                     value_type)) return 0;
@@ -39,6 +39,7 @@ static int setup_callbacks(p_ply iply, p_ply oply) {
 int main(int argc, char *argv[]) {
     const char *value;
     p_ply iply, oply; 
+    (void) argc; (void) argv;
     iply = ply_open("input.ply", NULL, 0, NULL);
     if (!iply) return 1; 
     if (!ply_read_header(iply)) return 1; 
