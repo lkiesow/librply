@@ -2,15 +2,15 @@
 
 ANSI C Library for PLY file format input and output
 
-- Based on RPly 1.1.4  
-  http://w3.impa.br/~diego/software/rply/  
-  Copyright © 2003-2015 Diego Nehab  
+- Based on RPly 1.1.4
+  http://w3.impa.br/~diego/software/rply/
+  Copyright © 2003-2015 Diego Nehab
   http://www.cs.princeton.edu/~diego
 
-- Modified 2011-09 by Lars Kiesow  
+- Modified 2011-09 by Lars Kiesow
   http://larskiesow.de
 
-- Modified 2016-03 by Nigel Stewart  
+- Modified 2016-03 by Nigel Stewart
   https://github.com/nigels-com/librply
 
 ## ABOUT
@@ -23,8 +23,12 @@ but is general enough to be useful for other purposes.
 
 For compilation of the library simply call
 
-`% make`
+    % make
 
-Furthermore you can create some example programs by calling
+You can compile some example programs by calling
 
-`% make test`
+    % make tools
+
+Finally, you can run some tests by calling
+
+    % make test

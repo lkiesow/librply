@@ -1,18 +1,32 @@
 INSTPATH=/usr/local/lib
 INCPATH=/usr/local/include
+LIBSRC=src/lib
+TOOLSRC=src/tools
 
-lib: src/lib/rply.c src/lib/rply.h src/lib/rplyfile.h
-	mkdir -p obj/ bin/
-	gcc -Wall -c -fPIC src/lib/rply.c -o obj/rply.o
+lib: obj
+	mkdir -p bin
 	gcc -shared -Wl,-soname,librply.so -o bin/librply.so obj/rply.o
 
-test: lib src/tools/*.c 
+obj: ${LIBSRC}/*.h ${LIBSRC}/*.c
+	mkdir -p obj
+	gcc -Wall -c -fPIC ${LIBSRC}/rply.c -o obj/rply.o
+
+tools: lib ${TOOLSRC}/*.c
 	mkdir -p bin/
-	gcc src/tools/dump.c       -lrply -Isrc -Lbin -o bin/dump
-	gcc src/tools/convert.c    -lrply -Isrc -Lbin -o bin/convert
-	gcc src/tools/sconvert.c   -lrply -Isrc -Lbin -o bin/sconvert
-	gcc src/tools/create_ply.c -lrply -Isrc -Lbin -o bin/create_ply
-	cp src/etc/input.ply bin/input.ply
+	gcc ${TOOLSRC}/dump.c       -lrply -I${LIBSRC} -Lbin -o bin/dump
+	gcc ${TOOLSRC}/convert.c    -lrply -I${LIBSRC} -Lbin -o bin/convert
+	gcc ${TOOLSRC}/sconvert.c   -lrply -I${LIBSRC} -Lbin -o bin/sconvert
+	gcc ${TOOLSRC}/create_ply.c -lrply -I${LIBSRC} -Lbin -o bin/create_ply
+	cp ${TOOLSRC}/input.ply bin/input.ply
+
+test: tools
+	cd bin && LD_LIBRARY_PATH=. ./create_ply
+	cd bin && LD_LIBRARY_PATH=. test -f new.ply
+	cd bin && LD_LIBRARY_PATH=. ./dump new.ply > /dev/null
+	cd bin && LD_LIBRARY_PATH=. ./sconvert
+	cd bin && LD_LIBRARY_PATH=. ./convert -l input.ply out.ply
+	cd bin && LD_LIBRARY_PATH=. rm -f out.ply output.ply new.ply
+
 
 install: lib
 	@echo Installing library to ${INSTPATH}
@@ -20,7 +34,7 @@ install: lib
 	@cp -f bin/librply.so ${INSTPATH}
 	@chmod 755 ${INSTPATH}/librply.so
 	@echo Installing header to ${INCPATH}
-	@cp -f src/lib/rply.h ${INCPATH}
+	@cp -f ${LIBSRC}/rply.h ${INCPATH}
 
 uninstall:
 	@echo Deleting ${INSTPATH}/librply.so
