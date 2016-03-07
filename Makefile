@@ -1,17 +1,17 @@
-INSTPATH=/lib
-INCPATH=/usr/include
+INSTPATH=/usr/local/lib
+INCPATH=/usr/local/include
 
-lib: src/rply.c src/rply.h
+lib: src/lib/rply.c src/lib/rply.h src/lib/rplyfile.h
 	mkdir -p obj/ bin/
-	gcc -Wall -c -fPIC src/rply.c -o obj/rply.o
+	gcc -Wall -c -fPIC src/lib/rply.c -o obj/rply.o
 	gcc -shared -Wl,-soname,librply.so -o bin/librply.so obj/rply.o
 
-test: lib src/etc/*.c 
+test: lib src/tools/*.c 
 	mkdir -p bin/
-	gcc src/etc/dump.c       -lrply -Isrc -Lbin -o bin/dump
-	gcc src/etc/convert.c    -lrply -Isrc -Lbin -o bin/convert
-	gcc src/etc/sconvert.c   -lrply -Isrc -Lbin -o bin/sconvert
-	gcc src/etc/create_ply.c -lrply -Isrc -Lbin -o bin/create_ply
+	gcc src/tools/dump.c       -lrply -Isrc -Lbin -o bin/dump
+	gcc src/tools/convert.c    -lrply -Isrc -Lbin -o bin/convert
+	gcc src/tools/sconvert.c   -lrply -Isrc -Lbin -o bin/sconvert
+	gcc src/tools/create_ply.c -lrply -Isrc -Lbin -o bin/create_ply
 	cp src/etc/input.ply bin/input.ply
 
 install: lib
@@ -20,7 +20,7 @@ install: lib
 	@cp -f bin/librply.so ${INSTPATH}
 	@chmod 755 ${INSTPATH}/librply.so
 	@echo Installing header to ${INCPATH}
-	@cp -f src/rply.h ${INCPATH}
+	@cp -f src/lib/rply.h ${INCPATH}
 
 uninstall:
 	@echo Deleting ${INSTPATH}/librply.so
